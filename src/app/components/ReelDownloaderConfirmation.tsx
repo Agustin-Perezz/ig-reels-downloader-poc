@@ -1,8 +1,7 @@
 "use client";
 
-import { Check, Download, Loader2, X } from "lucide-react";
+import { Check, Download, FileVideo, Loader2, X } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { formatFileSize } from "@/lib/utils";
 
 type ReelDownloaderConfirmationProps = {
@@ -13,6 +12,13 @@ type ReelDownloaderConfirmationProps = {
   onCancel: () => void;
 };
 
+const FILE_EXTENSION_REGEX = /\.([a-z0-9]+)$/i;
+
+function getFileType(filename: string): string {
+  const match = FILE_EXTENSION_REGEX.exec(filename);
+  return match?.[1]?.toUpperCase() ?? "MP4";
+}
+
 export function ReelDownloaderConfirmation({
   filename,
   fileSize,
@@ -21,44 +27,65 @@ export function ReelDownloaderConfirmation({
   onCancel,
 }: ReelDownloaderConfirmationProps) {
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/50 p-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <Check className="size-4 text-primary" />
-        <span>Reel ready to download</span>
+    <div className="mt-md bg-surface-container border border-outline-variant rounded-xl p-md text-left animate-in fade-in slide-in-from-top-4 duration-500">
+      <div className="flex items-center justify-between mb-md">
+        <div className="flex items-center gap-xs">
+          <Check className="size-5 text-primary" />
+          <h3 className="text-label-sm font-semibold text-on-surface uppercase tracking-widest">
+            Ready to Download
+          </h3>
+        </div>
+        <span className="px-sm py-1 bg-primary/10 text-primary rounded-full text-[11px] uppercase tracking-tighter font-semibold">
+          Loaded
+        </span>
       </div>
 
-      <dl className="flex flex-col gap-1 text-sm text-muted-foreground">
-        <div className="flex justify-between gap-4">
-          <dt>File</dt>
-          <dd className="truncate text-foreground">{filename}</dd>
+      <div className="flex flex-col sm:flex-row gap-md">
+        <div className="relative w-full sm:w-40 h-40 rounded-lg overflow-hidden flex-shrink-0 bg-surface-variant flex items-center justify-center">
+          <FileVideo className="size-12 text-on-surface-variant" />
         </div>
-        <div className="flex justify-between gap-4">
-          <dt>Size</dt>
-          <dd className="text-foreground">{formatFileSize(fileSize)}</dd>
+        <div className="flex flex-col justify-between py-xs flex-1 min-w-0">
+          <div className="min-w-0">
+            <p className="text-body-md text-on-surface-variant break-words">
+              {filename}
+            </p>
+          </div>
+          <div className="flex items-center gap-sm mt-sm">
+            <div className="flex items-center gap-xs text-on-surface-variant">
+              <Download className="size-[18px]" />
+              <span className="text-label-sm">{formatFileSize(fileSize)}</span>
+            </div>
+            <div className="flex items-center gap-xs text-on-surface-variant">
+              <FileVideo className="size-[18px]" />
+              <span className="text-label-sm">{getFileType(filename)}</span>
+            </div>
+          </div>
         </div>
-      </dl>
+      </div>
 
-      <div className="flex gap-2">
-        <Button
+      <div className="flex gap-sm mt-md">
+        <button
           type="button"
-          size="lg"
           onClick={onDownload}
           disabled={isDownloading}
-          className="flex-1"
+          className="flex-1 flex items-center justify-center gap-xs px-md py-sm bg-primary-container text-white text-label-sm font-semibold rounded-lg hover:bg-inverse-primary transition-colors disabled:opacity-50"
         >
-          {isDownloading ? <Loader2 className="animate-spin" /> : <Download />}
+          {isDownloading ? (
+            <Loader2 className="size-[18px] animate-spin" />
+          ) : (
+            <Download className="size-[18px]" />
+          )}
           {isDownloading ? "Downloading..." : "Download"}
-        </Button>
-        <Button
+        </button>
+        <button
           type="button"
-          size="lg"
-          variant="ghost"
           onClick={onCancel}
           disabled={isDownloading}
+          className="flex items-center justify-center gap-xs px-md py-sm bg-surface-variant text-on-surface text-label-sm font-semibold rounded-lg hover:bg-surface-bright border border-outline-variant transition-colors disabled:opacity-50"
         >
-          <X />
+          <X className="size-[18px]" />
           Cancel
-        </Button>
+        </button>
       </div>
     </div>
   );
