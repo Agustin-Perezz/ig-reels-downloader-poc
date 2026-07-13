@@ -1,39 +1,20 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import {
+  DEFAULT_FILENAME,
+  DOWNLOAD_ENDPOINT,
+  type DownloadResponse,
+  extractFilename,
+  FormStatus,
+  INITIAL_FORM_STATE,
+} from "./download-types";
 
-export enum FormStatus {
-  Idle = "idle",
-  Fetching = "fetching",
-  Ready = "ready",
-  Downloading = "downloading",
-  Error = "error",
-}
-
-type FormState = {
-  status: FormStatus;
-  errorMessage: string;
-  blob: Blob | null;
-  filename: string;
-};
-
-const INITIAL_STATE: FormState = {
-  status: FormStatus.Idle,
-  errorMessage: "",
-  blob: null,
-  filename: "",
-};
-
-const DOWNLOAD_ENDPOINT = "/api/download";
-const DEFAULT_FILENAME = `reel-${Date.now()}.mp4`;
-
-type DownloadResponse = {
-  error?: string;
-};
+export { FormStatus };
 
 export function useReelDownload() {
   const [url, setUrl] = useState("");
-  const [state, setState] = useState<FormState>(INITIAL_STATE);
+  const [state, setState] = useState(INITIAL_FORM_STATE);
 
   const handlePaste = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.clipboard) {
@@ -54,7 +35,7 @@ export function useReelDownload() {
   const handleFetch = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      setState({ ...INITIAL_STATE, status: FormStatus.Fetching });
+      setState({ ...INITIAL_FORM_STATE, status: FormStatus.Fetching });
 
       try {
         const response = await fetch(DOWNLOAD_ENDPOINT, {
@@ -66,7 +47,7 @@ export function useReelDownload() {
         if (!response.ok) {
           const data = (await response.json()) as DownloadResponse;
           setState({
-            ...INITIAL_STATE,
+            ...INITIAL_FORM_STATE,
             status: FormStatus.Error,
             errorMessage: data.error ?? "Fetch failed",
           });
@@ -84,7 +65,7 @@ export function useReelDownload() {
         });
       } catch (err) {
         setState({
-          ...INITIAL_STATE,
+          ...INITIAL_FORM_STATE,
           status: FormStatus.Error,
           errorMessage: err instanceof Error ? err.message : "Network error",
         });
@@ -109,12 +90,12 @@ export function useReelDownload() {
     anchor.remove();
     URL.revokeObjectURL(objectUrl);
 
-    setState(INITIAL_STATE);
+    setState(INITIAL_FORM_STATE);
     setUrl("");
   }, [state.blob, state.filename]);
 
   const handleCancel = useCallback(() => {
-    setState(INITIAL_STATE);
+    setState(INITIAL_FORM_STATE);
   }, []);
 
   return {
@@ -126,10 +107,4 @@ export function useReelDownload() {
     handleDownload,
     handleCancel,
   };
-}
-
-function extractFilename(headers: Headers): string | null {
-  const disposition = headers.get("Content-Disposition") ?? "";
-  const match = /filename="?([^"]+)"?/.exec(disposition);
-  return match?.[1] ?? null;
 }

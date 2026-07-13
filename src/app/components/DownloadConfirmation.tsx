@@ -4,7 +4,7 @@ import { Check, Download, FileVideo, Loader2, X } from "lucide-react";
 
 import { formatFileSize } from "@/lib/utils";
 
-type ReelDownloaderConfirmationProps = {
+type DownloadConfirmationProps = {
   filename: string;
   fileSize: number;
   isDownloading: boolean;
@@ -19,13 +19,13 @@ function getFileType(filename: string): string {
   return match?.[1]?.toUpperCase() ?? "MP4";
 }
 
-export function ReelDownloaderConfirmation({
+export function DownloadConfirmation({
   filename,
   fileSize,
   isDownloading,
   onDownload,
   onCancel,
-}: ReelDownloaderConfirmationProps) {
+}: DownloadConfirmationProps) {
   return (
     <div className="mt-md bg-surface-container border border-outline-variant rounded-xl p-md text-left animate-in fade-in slide-in-from-top-4 duration-500">
       <div className="flex items-center justify-between mb-md">
