@@ -1,20 +1,46 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import {
-  DEFAULT_FILENAME,
-  DOWNLOAD_ENDPOINT,
-  type DownloadResponse,
-  extractFilename,
-  FormStatus,
-  INITIAL_FORM_STATE,
-} from "./download-types";
+import { FormStatus } from "./download-types";
 
 export { FormStatus };
 
+export type VideoManifestItem = {
+  id: string;
+  filename: string;
+  proxyUrl: string;
+  width: number;
+  height: number;
+  thumbnailUrl: string;
+};
+
+type VideoState = {
+  status: FormStatus;
+  errorMessage: string;
+  manifest: VideoManifestItem[] | null;
+  downloadingId: string | null;
+};
+
+const INITIAL_STATE: VideoState = {
+  status: FormStatus.Idle,
+  errorMessage: "",
+  manifest: null,
+  downloadingId: null,
+};
+
+const DOWNLOAD_ENDPOINT = "/api/download";
+
+type VideoManifestResponse = {
+  videos: VideoManifestItem[];
+};
+
+type ErrorResponse = {
+  error?: string;
+};
+
 export function useReelDownload() {
   const [url, setUrl] = useState("");
-  const [state, setState] = useState(INITIAL_FORM_STATE);
+  const [state, setState] = useState<VideoState>(INITIAL_STATE);
 
   const handlePaste = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.clipboard) {
@@ -35,7 +61,7 @@ export function useReelDownload() {
   const handleFetch = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      setState({ ...INITIAL_FORM_STATE, status: FormStatus.Fetching });
+      setState({ ...INITIAL_STATE, status: FormStatus.Fetching });
 
       try {
         const response = await fetch(DOWNLOAD_ENDPOINT, {
@@ -45,27 +71,25 @@ export function useReelDownload() {
         });
 
         if (!response.ok) {
-          const data = (await response.json()) as DownloadResponse;
+          const data = (await response.json()) as ErrorResponse;
           setState({
-            ...INITIAL_FORM_STATE,
+            ...INITIAL_STATE,
             status: FormStatus.Error,
             errorMessage: data.error ?? "Fetch failed",
           });
           return;
         }
 
-        const blob = await response.blob();
-        const filename = extractFilename(response.headers) ?? DEFAULT_FILENAME;
-
+        const data = (await response.json()) as VideoManifestResponse;
         setState({
           status: FormStatus.Ready,
           errorMessage: "",
-          blob,
-          filename,
+          manifest: data.videos,
+          downloadingId: null,
         });
       } catch (err) {
         setState({
-          ...INITIAL_FORM_STATE,
+          ...INITIAL_STATE,
           status: FormStatus.Error,
           errorMessage: err instanceof Error ? err.message : "Network error",
         });
@@ -74,28 +98,74 @@ export function useReelDownload() {
     [url],
   );
 
-  const handleDownload = useCallback(() => {
-    if (!state.blob) {
-      return;
-    }
-
-    setState((prev) => ({ ...prev, status: FormStatus.Downloading }));
-
-    const objectUrl = URL.createObjectURL(state.blob);
+  const saveBlob = useCallback((blob: Blob, filename: string) => {
+    const objectUrl = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = objectUrl;
-    anchor.download = state.filename;
+    anchor.download = filename;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(objectUrl);
+  }, []);
 
-    setState(INITIAL_FORM_STATE);
-    setUrl("");
-  }, [state.blob, state.filename]);
+  const handleDownloadOne = useCallback(
+    async (item: VideoManifestItem) => {
+      setState((prev) => ({
+        ...prev,
+        downloadingId: item.id,
+        status: FormStatus.Downloading,
+      }));
+      try {
+        const response = await fetch(item.proxyUrl);
+        if (!response.ok) {
+          throw new Error(`Download failed (status ${response.status})`);
+        }
+        const blob = await response.blob();
+        saveBlob(blob, item.filename);
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          status: FormStatus.Error,
+          errorMessage: err instanceof Error ? err.message : "Download failed",
+        }));
+        return;
+      }
+      setState((prev) => ({
+        ...prev,
+        downloadingId: null,
+        status: prev.manifest ? FormStatus.Ready : FormStatus.Idle,
+      }));
+    },
+    [saveBlob],
+  );
+
+  const handleDownloadAll = useCallback(async () => {
+    if (!state.manifest) {
+      return;
+    }
+    setState((prev) => ({ ...prev, status: FormStatus.Downloading }));
+    for (const item of state.manifest) {
+      setState((prev) => ({ ...prev, downloadingId: item.id }));
+      try {
+        const response = await fetch(item.proxyUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          saveBlob(blob, item.filename);
+        }
+      } catch {
+        // continue to next item on error
+      }
+    }
+    setState((prev) => ({
+      ...prev,
+      downloadingId: null,
+      status: FormStatus.Ready,
+    }));
+  }, [state.manifest, saveBlob]);
 
   const handleCancel = useCallback(() => {
-    setState(INITIAL_FORM_STATE);
+    setState(INITIAL_STATE);
   }, []);
 
   return {
@@ -104,7 +174,8 @@ export function useReelDownload() {
     state,
     handlePaste,
     handleFetch,
-    handleDownload,
+    handleDownloadOne,
+    handleDownloadAll,
     handleCancel,
   };
 }
