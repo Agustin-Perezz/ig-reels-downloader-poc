@@ -42,28 +42,28 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    A[UrlInputBar] -->|POST /api/download-image| B[route.ts]
-    B --> C[extractImageManifest]
-    C --> D[initInstagramSession<br/>fetch LSD token]
-    D --> E[fetchMediaGraphQL<br/>PolarisLoggedOut query]
-    E --> F[image_versions2.candidates<br/>pick highest-res]
-    F --> G[Response JSON<br/>images[]]
-    G --> H[PhotoManifestList]
-    H -->|click Save| I[GET /api/image-proxy?src=...]
-    I --> J[fetch Instagram CDN<br/>host-allowlisted]
-    J --> K[Blob download]
+    A["UrlInputBar"] -->|"POST /api/download-image"| B["route.ts"]
+    B --> C["extractImageManifest"]
+    C --> D["initInstagramSession<br/>fetch LSD token"]
+    D --> E["fetchMediaGraphQL<br/>PolarisLoggedOut query"]
+    E --> F["image_versions2.candidates<br/>pick highest-res"]
+    F --> G["Response JSON<br/>images"]
+    G --> H["PhotoManifestList"]
+    H -->|"click Save"| I["GET /api/image-proxy"]
+    I --> J["fetch Instagram CDN<br/>host-allowlisted"]
+    J --> K["Blob download"]
 ```
 
 ### Story (auth-gated, dormant)
 
 ```mermaid
 flowchart LR
-    A[UrlInputBar] -->|POST /api/download-story| B{INSTAGRAM_COOKIES_FILE<br/>set?}
-    B -->|no| C[401 needsAuth:true]
-    B -->|yes| D[yt-dlp --cookies -J]
-    D --> E[Response JSON<br/>items[]]
-    E --> F[StoryManifestList]
-    C --> G[Story chip disabled<br/>coming soon]
+    A["UrlInputBar"] -->|"POST /api/download-story"| B{"INSTAGRAM_COOKIES_FILE<br/>set?"}
+    B -->|"no"| C["401 needsAuth true"]
+    B -->|"yes"| D["yt-dlp --cookies -J"]
+    D --> E["Response JSON<br/>items"]
+    E --> F["StoryManifestList"]
+    C --> G["Story chip disabled<br/>coming soon"]
 ```
 
 ## Folder Structure
