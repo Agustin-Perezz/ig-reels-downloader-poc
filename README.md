@@ -1,6 +1,6 @@
 # InstaSave
 
-A web app for downloading Instagram media — Videos, Reels, IGTV, Photos, and Stories — built on Next.js (App Router), React 19, TypeScript strict mode, Tailwind CSS v4, Biome, Playwright, and Sentry. Video/Reel/IGTV downloads are streamed through `yt-dlp`; Photo downloads hit Instagram's public GraphQL endpoint directly; Story downloads are wired but dormant until an Instagram session cookie is provided.
+A web app for downloading Instagram media — Videos, Reels, IGTV, Photos, and Stories — built on Next.js (App Router), React 19, TypeScript strict mode, Tailwind CSS v4, Biome, Playwright, and Sentry. All media types are fetched through Instagram's public GraphQL endpoint; file downloads are proxied through a host-allowlisted CORS bypass. Story downloads are wired but dormant until an Instagram session cookie is provided. The app runs entirely on Vercel — no external binaries or long-running subprocesses required.
 
 ## Tech Stack
 
@@ -12,8 +12,8 @@ A web app for downloading Instagram media — Videos, Reels, IGTV, Photos, and S
 | Components      | base-ui + shadcn                               |
 | Styling         | Tailwind CSS v4                                |
 | Forms           | react-hook-form + zod                          |
-| Media engine    | `yt-dlp` (video) + Instagram GraphQL (images)  |
-| Carousel zip    | `zip-stream`                                   |
+| Media engine    | Instagram GraphQL (video + images)           |
+| File proxy      | `/api/image-proxy` (host-allowlisted)        |
 | Lint / Format   | Biome 2                                        |
 | E2E             | Playwright (Chromium)                          |
 | Monitoring      | Sentry (`@sentry/nextjs`)                      |
@@ -27,15 +27,16 @@ A web app for downloading Instagram media — Videos, Reels, IGTV, Photos, and S
 
 ```mermaid
 flowchart LR
-    A[UrlInputBar] -->|POST /api/download| B[route.ts]
-    B --> C[fetchMediaInfo<br/>yt-dlp -J]
-    C --> D{isPlaylist<br/>and > 1 entry?}
-    D -->|no| E[streamReel<br/>yt-dlp -o -]
-    D -->|yes| F[downloadAndZipVideos<br/>yt-dlp → temp dir → zip-stream]
-    E --> G[Response<br/>video/mp4]
-    F --> H[Response<br/>application/zip]
-    G --> I[DownloadConfirmation]
-    H --> I
+    A["UrlInputBar"] -->|"POST /api/download"| B["route.ts"]
+    B --> C["extractVideoManifest"]
+    C --> D["initInstagramSession<br/>fetch LSD token"]
+    D --> E["fetchMediaGraphQL<br/>PolarisLoggedOut query"]
+    E --> F["video_versions<br/>pick highest-res"]
+    F --> G["Response JSON<br/>videos"]
+    G --> H["VideoManifestList"]
+    H -->|"click Save"| I["GET /api/image-proxy"]
+    I --> J["fetch Instagram CDN<br/>host-allowlisted"]
+    J --> K["Blob download"]
 ```
 
 ### Photo
@@ -60,10 +61,7 @@ flowchart LR
 flowchart LR
     A["UrlInputBar"] -->|"POST /api/download-story"| B{"INSTAGRAM_COOKIES_FILE<br/>set?"}
     B -->|"no"| C["401 needsAuth true"]
-    B -->|"yes"| D["yt-dlp --cookies -J"]
-    D --> E["Response JSON<br/>items"]
-    E --> F["StoryManifestList"]
-    C --> G["Story chip disabled<br/>coming soon"]
+    C --> D["Story chip disabled<br/>coming soon"]
 ```
 
 ## Folder Structure
@@ -80,9 +78,9 @@ ig-reels-downloader-poc/
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── download/route.ts        # Video/Reel/IGTV → mp4 or zip
+│   │   │   ├── download/route.ts        # Video/Reel/IGTV → JSON manifest
 │   │   │   ├── download-image/route.ts  # Photo → JSON manifest
-│   │   │   ├── download-story/route.ts  # Story → JSON manifest (auth-gated)
+│   │   │   ├── download-story/route.ts  # Story → 401 (auth-gated)
 │   │   │   └── image-proxy/route.ts     # CORS bypass for Instagram CDN
 │   │   ├── components/
 │   │   │   ├── MediaDownloader.tsx      # Container, switches on media type
@@ -91,7 +89,8 @@ ig-reels-downloader-poc/
 │   │   │   ├── VideoDownloaderForm.tsx
 │   │   │   ├── PhotoDownloaderForm.tsx
 │   │   │   ├── StoryDownloaderForm.tsx
-│   │   │   ├── DownloadConfirmation.tsx # Single-file save card
+│   │   │   ├── VideoManifestList.tsx
+│   │   │   ├── VideoManifestCard.tsx
 │   │   │   ├── PhotoManifestList.tsx
 │   │   │   ├── ImageManifestCard.tsx
 │   │   │   ├── StoryManifestList.tsx
@@ -108,7 +107,7 @@ ig-reels-downloader-poc/
 │   ├── lib/
 │   │   ├── instagram-session.ts         # LSD token + GraphQL fetch
 │   │   ├── instagram-image.ts           # Image manifest extraction
-│   │   ├── yt-dlp.ts                    # streamReel, fetchMediaInfo, downloadAndZipVideos
+│   │   ├── instagram-video.ts           # Video manifest extraction
 │   │   ├── validators.ts                # Zod schemas + InstagramMediaType enum
 │   │   └── utils.ts                     # cn, formatFileSize
 │   ├── shared/
@@ -146,13 +145,7 @@ ig-reels-downloader-poc/
    pnpm test:install
    ```
 
-3. Ensure `yt-dlp` is installed and on your `PATH` (required for video and story downloads):
-
-   ```bash
-   yt-dlp --version
-   ```
-
-4. Start the dev server:
+3. Start the dev server:
 
    ```bash
    pnpm dev
@@ -160,9 +153,9 @@ ig-reels-downloader-poc/
 
 The app runs at [http://localhost:3000](http://localhost:3000).
 
-### Optional: Story downloads
+### Story downloads
 
-Story downloads require an Instagram session cookie in Netscape format. Set `INSTAGRAM_COOKIES_FILE` in `.env.local` to the path of a cookies file exported from your browser. Without it, the Story chip stays disabled and `/api/download-story` returns `401 { needsAuth: true }`.
+Story downloads require an Instagram session cookie. Without it, the Story chip stays disabled and `/api/download-story` returns `401 { needsAuth: true }`. This feature is not yet implemented.
 
 ## Scripts
 
