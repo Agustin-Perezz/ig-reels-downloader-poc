@@ -1,11 +1,15 @@
 export function ReelDownloaderHeader() {
   return (
-    <div className="flex flex-col gap-2 text-center">
-      <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-        IG Reels Downloader
+    <div className="flex flex-col gap-3 text-center">
+      <h1 className="text-4xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50">
+        IG{" "}
+        <span className="bg-gradient-to-r from-primary to-rose-400 bg-clip-text text-transparent">
+          Reels
+        </span>{" "}
+        Downloader
       </h1>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        Paste an Instagram reel URL to download the video.
+      <p className="text-base text-muted-foreground">
+        Paste an Instagram reel URL to fetch and download the video.
       </p>
     </div>
   );
