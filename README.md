@@ -1,6 +1,6 @@
-# next-scaffold
+# InstaSave
 
-A production-ready [Next.js](https://nextjs.org) starter built on the App Router with React 19, TypeScript strict mode, base-ui + shadcn components, Tailwind CSS v4, Biome for lint/format, Playwright for E2E, and Sentry for monitoring. The scaffold follows a shift-left approach: linting, type checking, security scanning, and E2E tests run on every push and pull request so issues are caught as early as possible in the development cycle.
+A web app for downloading Instagram media — Videos, Reels, IGTV, Photos, and Stories — built on Next.js (App Router), React 19, TypeScript strict mode, Tailwind CSS v4, Biome, Playwright, and Sentry. Video/Reel/IGTV downloads are streamed through `yt-dlp`; Photo downloads hit Instagram's public GraphQL endpoint directly; Story downloads are wired but dormant until an Instagram session cookie is provided.
 
 ## Tech Stack
 
@@ -12,6 +12,8 @@ A production-ready [Next.js](https://nextjs.org) starter built on the App Router
 | Components      | base-ui + shadcn                               |
 | Styling         | Tailwind CSS v4                                |
 | Forms           | react-hook-form + zod                          |
+| Media engine    | `yt-dlp` (video) + Instagram GraphQL (images)  |
+| Carousel zip    | `zip-stream`                                   |
 | Lint / Format   | Biome 2                                        |
 | E2E             | Playwright (Chromium)                          |
 | Monitoring      | Sentry (`@sentry/nextjs`)                      |
@@ -19,33 +21,115 @@ A production-ready [Next.js](https://nextjs.org) starter built on the App Router
 | Package manager | pnpm 9                                         |
 | Git hooks       | Husky + nano-staged                            |
 
+## Data Flow
+
+### Video / Reel / IGTV
+
+```mermaid
+flowchart LR
+    A[UrlInputBar] -->|POST /api/download| B[route.ts]
+    B --> C[fetchMediaInfo<br/>yt-dlp -J]
+    C --> D{isPlaylist<br/>and > 1 entry?}
+    D -->|no| E[streamReel<br/>yt-dlp -o -]
+    D -->|yes| F[downloadAndZipVideos<br/>yt-dlp → temp dir → zip-stream]
+    E --> G[Response<br/>video/mp4]
+    F --> H[Response<br/>application/zip]
+    G --> I[DownloadConfirmation]
+    H --> I
+```
+
+### Photo
+
+```mermaid
+flowchart LR
+    A["UrlInputBar"] -->|"POST /api/download-image"| B["route.ts"]
+    B --> C["extractImageManifest"]
+    C --> D["initInstagramSession<br/>fetch LSD token"]
+    D --> E["fetchMediaGraphQL<br/>PolarisLoggedOut query"]
+    E --> F["image_versions2.candidates<br/>pick highest-res"]
+    F --> G["Response JSON<br/>images"]
+    G --> H["PhotoManifestList"]
+    H -->|"click Save"| I["GET /api/image-proxy"]
+    I --> J["fetch Instagram CDN<br/>host-allowlisted"]
+    J --> K["Blob download"]
+```
+
+### Story (auth-gated, dormant)
+
+```mermaid
+flowchart LR
+    A["UrlInputBar"] -->|"POST /api/download-story"| B{"INSTAGRAM_COOKIES_FILE<br/>set?"}
+    B -->|"no"| C["401 needsAuth true"]
+    B -->|"yes"| D["yt-dlp --cookies -J"]
+    D --> E["Response JSON<br/>items"]
+    E --> F["StoryManifestList"]
+    C --> G["Story chip disabled<br/>coming soon"]
+```
+
 ## Folder Structure
 
 ```
-next-scaffold/
+ig-reels-downloader-poc/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                # Lint, typecheck, E2E, build pipeline
-├── docs/                         # Engineering guidelines
+│       └── ci.yml                       # Lint, typecheck, E2E, build, Snyk
+├── docs/                                # Engineering guidelines
 │   ├── 01_COMPONENT-PATTERNS.md
 │   ├── 02_FRONTEND-FOLDER-STRUCTURE.md
-│   └── 04_TYPESCRIPT-STANDARDS.md
-├── public/                       # Static assets served at root
+│   └── 03_TYPESCRIPT-STANDARDS.md
 ├── src/
-│   ├── app/                      # App Router routes (pages, layouts, actions)
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── download/route.ts        # Video/Reel/IGTV → mp4 or zip
+│   │   │   ├── download-image/route.ts  # Photo → JSON manifest
+│   │   │   ├── download-story/route.ts  # Story → JSON manifest (auth-gated)
+│   │   │   └── image-proxy/route.ts     # CORS bypass for Instagram CDN
+│   │   ├── components/
+│   │   │   ├── MediaDownloader.tsx      # Container, switches on media type
+│   │   │   ├── MediaTypeChips.tsx       # Video / Photo / Reels / Story / IGTV
+│   │   │   ├── UrlInputBar.tsx          # Shared input + paste + submit
+│   │   │   ├── VideoDownloaderForm.tsx
+│   │   │   ├── PhotoDownloaderForm.tsx
+│   │   │   ├── StoryDownloaderForm.tsx
+│   │   │   ├── DownloadConfirmation.tsx # Single-file save card
+│   │   │   ├── PhotoManifestList.tsx
+│   │   │   ├── ImageManifestCard.tsx
+│   │   │   ├── StoryManifestList.tsx
+│   │   │   ├── StoryManifestCard.tsx
+│   │   │   ├── TopNavBar.tsx
+│   │   │   ├── ValueProposition.tsx
+│   │   │   ├── Instructions.tsx
+│   │   │   └── SiteFooter.tsx
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx                     # Composition only
 │   ├── components/
-│   │   └── ui/                   # Reusable base-ui / shadcn primitives
-│   └── lib/
-│       └── utils.ts              # Shared utilities (cn, helpers)
-├── tests/                        # Playwright E2E specs
-├── biome.json                    # Linter & formatter config
-├── next.config.ts                # Next.js configuration
+│   │   └── ui/                          # Reusable shadcn / base-ui primitives
+│   ├── lib/
+│   │   ├── instagram-session.ts         # LSD token + GraphQL fetch
+│   │   ├── instagram-image.ts           # Image manifest extraction
+│   │   ├── yt-dlp.ts                    # streamReel, fetchMediaInfo, downloadAndZipVideos
+│   │   ├── validators.ts                # Zod schemas + InstagramMediaType enum
+│   │   └── utils.ts                     # cn, formatFileSize
+│   ├── shared/
+│   │   └── hooks/
+│   │       ├── download-types.ts        # FormStatus enum + shared state
+│   │       ├── useReelDownload.ts       # Video/Reel/IGTV
+│   │       ├── useImageDownload.ts      # Photo
+│   │       └── useStoryDownload.ts      # Story
+│   ├── sentry.client.config.ts
+│   ├── sentry.server.config.ts
+│   ├── sentry.edge.config.ts
+│   └── instrumentation.ts
+├── tests/
+│   ├── reel-downloader.spec.ts          # URL validation, paste, chip switching
+│   └── smoke.spec.ts
+├── biome.json
+├── next.config.ts                       # next/image remote patterns for IG CDN
 ├── package.json
 ├── playwright.config.ts
-└── tsconfig.json                 # Path alias: @/* -> ./src/*
+└── tsconfig.json                        # @/* → ./src/*
 ```
-
-See [`AGENTS.md`](./AGENTS.md) for the engineering conventions agents and contributors should follow.
 
 ## Setup
 
@@ -62,13 +146,23 @@ See [`AGENTS.md`](./AGENTS.md) for the engineering conventions agents and contri
    pnpm test:install
    ```
 
-3. Start the dev server:
+3. Ensure `yt-dlp` is installed and on your `PATH` (required for video and story downloads):
+
+   ```bash
+   yt-dlp --version
+   ```
+
+4. Start the dev server:
 
    ```bash
    pnpm dev
    ```
 
 The app runs at [http://localhost:3000](http://localhost:3000).
+
+### Optional: Story downloads
+
+Story downloads require an Instagram session cookie in Netscape format. Set `INSTAGRAM_COOKIES_FILE` in `.env.local` to the path of a cookies file exported from your browser. Without it, the Story chip stays disabled and `/api/download-story` returns `401 { needsAuth: true }`.
 
 ## Scripts
 
@@ -120,5 +214,4 @@ Configure these in **Settings → Secrets and variables → Actions**:
 
 - [Component Patterns](./docs/01_COMPONENT-PATTERNS.md)
 - [Frontend Folder Structure](./docs/02_FRONTEND-FOLDER-STRUCTURE.md)
-- [TypeScript Standards](./docs/04_TYPESCRIPT-STANDARDS.md)
-
+- [TypeScript Standards](./docs/03_TYPESCRIPT-STANDARDS.md)
