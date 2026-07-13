@@ -4,7 +4,7 @@ test("rejects non-Instagram URL with an error message", async ({ page }) => {
   await page.goto("/");
 
   const input = page.getByPlaceholder("Insert instagram link here");
-  const button = page.getByRole("button", { name: "Download" });
+  const button = page.getByRole("button", { name: "Get video" });
 
   await input.fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
   await button.click();
