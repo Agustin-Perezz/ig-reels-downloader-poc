@@ -3,8 +3,10 @@ import { expect, test } from "@playwright/test";
 test("rejects non-Instagram URL with an error message", async ({ page }) => {
   await page.goto("/");
 
-  const input = page.getByPlaceholder("Insert instagram link here");
-  const button = page.getByRole("button", { name: "Download" });
+  const input = page.getByPlaceholder(
+    "Insert instagram video or reel link here",
+  );
+  const button = page.getByRole("button", { name: "Get video" });
 
   await input.fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
   await button.click();
@@ -26,7 +28,9 @@ test("paste button fills input from clipboard", async ({ page }) => {
   const pasteButton = page.getByRole("button", { name: "Paste" });
   await pasteButton.click();
 
-  const input = page.getByPlaceholder("Insert instagram link here");
+  const input = page.getByPlaceholder(
+    "Insert instagram video or reel link here",
+  );
   await expect(input).toHaveValue(
     "https://www.instagram.com/reel/CxNWBWlIAcp/",
   );
